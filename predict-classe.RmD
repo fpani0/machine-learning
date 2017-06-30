@@ -1,0 +1,85 @@
+---
+title: "Predicting classes of movement activity"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Overview
+Using devices to track movement activity of six young health individuals, this project provides an predictive analysis of where each movement falls into 5 different classes: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+The data set from this course came from http://groupware.les.inf.puc-rio.br/har WLE dataset and thank to its contributors Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H for it's use.
+
+The training / testing data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+# How we built the model
+We build the  model Load in the training and test sets as given.  Cross validation was performed on the training by taking 70% of it to build the prediction algorthim.  Predication algorithm used was random forest trees because they are best suited for classification problems such as this one.
+
+# Load data and clean and cross validation
+
+We load the data and set aside 70% for cross validation, then remove any columns with missing values, irrevelant or have zero variance.
+```{r}
+library(caret)
+
+#load data into datasets 
+training <- read.csv(file="pml-training.csv", header=TRUE, sep=",")
+testing <- read.csv(file="pml-testing.csv", header=TRUE, sep=",")
+
+#load in data and partition 70% for training
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+myTrain <- training[inTrain, ]
+myTest <- training[-inTrain, ]
+
+#remove any columns with NA values 
+myTrainClean <- myTrain[,colSums(is.na(myTrain)) == 0]
+myTestClean <-myTest[,colSums(is.na(myTest)) == 0]
+
+#remove the first 7 columns as they are not pertinent to determine classe
+myTrainClean <- myTrainClean[, -c(1:7)]
+myTestClean <- myTestClean[, -c(1:7)]
+```
+
+
+We test whether or not there are columns that have any variability.  If they do not, they have no influence over the predictor and we can throw them out.  This equates to any nzv of true. 
+```{r}
+nsv <- nearZeroVar(myTrainClean)
+myTrainClean <- myTrainClean[, -nsv]
+```
+
+
+We fit a random forest model as follows.
+```{r}
+set.seed(13243)
+modFit <- train(classe~ ., data=myTrainClean, method="rf")
+```
+
+# Expected out of sample error
+Predict the values from the training set and cross validate on the testing set that we established from the training set.  We see that the accuracy is 99.59% which tells us that the out of sample error is small (1 - 99.59% = 0.41%)
+```{r}
+predict <- predict(modFit, myTestClean)
+confusionMatrix(myTestClean$classe, predict)
+```
+
+# Print off 20 test cases using the test data set provided by the WLE dataset.  
+```{r}
+predict_final <- predict(modFit, testing)
+print("The sample length is", length(predict_final))
+print(predict_final)
+
+```
+
+# Appendix - Diagrams
+The following diagrams supplement the research.  We find out what the 20 most important variables are and plot the top two against each other.  We see a clear deliniation from pitch_forearm and roll_belt and how the classes are quite different from one another - thereby giving a graphical representation of two good predictors. 
+```{r}
+
+#Diagram #1: Plot 20 most important variables
+training_imp <- varImp(modFit)
+plot(training_imp, top=20)
+
+#Diagram #2:  Plot two most important variables
+qplot(roll_belt, pitch_forearm,col=classe,data=myTrainClean) + ggtitle("Comparing Classes across the two most important predictors in model")
+```
+
+
